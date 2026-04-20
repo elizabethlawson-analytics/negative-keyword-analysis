@@ -30,6 +30,8 @@ Individual words that signal mismatched intent are often invisible when buried i
 | Craigslist | Automotive | Users searching for peer-to-peer listings, not dealership inventory |
 | Portal | Automotive | Users trying to access payment/employee systems |
 | Vyepti | Healthcare | Competitor treatment, not the advertised condition |
+| Piano | Furniture / Retail | Users searching for piano-shaped furniture, not general furniture buyers |
+| Schewels | Furniture / Retail | Regional competitor — users looking for a specific other store |
 
 These patterns repeat across industries. Every large paid search account has them. The question is whether you have a method to find them.
 
@@ -37,116 +39,133 @@ These patterns repeat across industries. Every large paid search account has the
 
 ## Implementations
 
-This repo contains three implementations of the same methodology, suited to different technical environments:
+This repo contains five implementations of the same methodology. All produce identical output — choose the one that fits your environment.
 
-### Option A: SQL / BigQuery (Automated, Always Current)
+### Option A: SQL / BigQuery (Fully Automated)
 
 **[`negative_keyword_analysis.sql`](negative_keyword_analysis.sql)**
 
-- Requires: Google Ads → BigQuery Data Transfer + GA4 → BigQuery export
-- Runs automatically, always reflects the latest 90 days of data
+- Requires: Google Ads → BigQuery via Data Transfer Service + GA4 → BigQuery export
+- Runs automatically, always reflects the latest data
 - No manual maintenance required
 - Connect the resulting BigQuery view directly to Looker Studio
 
 Best for: Organizations with data engineering support or existing BigQuery pipelines.
 
-### Option B: Python (Semi-Automated, No BigQuery Required)
+---
 
-**[`negative_keyword_analysis.py`](negative_keyword_analysis.py)**
+### Option B: Manual Export (No Infrastructure Required)
 
-- Requires: GA4 with Google Ads connected, Python, pandas, NLTK
-- Export a custom GA4 Explore report to CSV, run the script
-- Includes an `investigate_word()` helper to drill into any flagged word
-- Sample dataset included — run it immediately with no setup
+Export your data from Looker Studio or GA4 Explore, then run either script below.
+The sample dataset (`sample_data.csv`) uses the Google Merchandise Store demo account
+so you can run the analysis immediately without your own data.
 
-Best for: Data scientists and analysts comfortable with Python who don't have BigQuery access.
+**Python:** [`negative_keyword_analysis_manual.py`](negative_keyword_analysis_manual.py)
+```bash
+pip install pandas
+python negative_keyword_analysis_manual.py
+```
 
-### Option C: R (Alternative to Python)
+**R:** [`negative_keyword_analysis_manual.R`](negative_keyword_analysis_manual.R)
+```r
+install.packages("readr")
+source("negative_keyword_analysis_manual.R")
+```
 
-**[`negative_keyword_analysis.R`](negative_keyword_analysis.R)**
+Best for: Anyone comfortable with Python or R who does not have BigQuery access.
 
-- Requires: R, googleAnalyticsR, qdap, stopwords packages
-- Pulls data directly from Google Analytics API (Universal Analytics / GA3)
-- Includes more sophisticated preprocessing: geographic term removal, brand detection, Spanish stopwords
-- Note: Written for Universal Analytics. For GA4, use the Python or SQL version.
+**Data export steps:**
 
-Best for: R users or organizations still on Universal Analytics.
+*From Looker Studio:*
+1. Add a table to your report with: Session Google Ads query, Sessions, Engaged sessions, Ads cost
+2. Click the three dots on the table → Export → CSV
+3. Rename the file or update `DATA_PATH` in the script
+
+*From GA4 Explore:*
+1. Create a Free Form exploration with: Session Google Ads query, Sessions, Engaged sessions, Google Ads cost
+2. Export as CSV (requires Editor access)
+3. Set `SKIP_ROWS = 6` and `COST_COLUMN = 'Google Ads cost'` in the script
 
 ---
 
-## Getting Started (Python — Quickest Path)
+### Option C: GA4 Data API (Automated, No BigQuery Required)
 
+Pull data directly from GA4 without any manual export.
+Requires a Google Cloud service account with GA4 Data API access.
+
+**Python:** [`negative_keyword_analysis_api.py`](negative_keyword_analysis_api.py)
 ```bash
-# Install dependencies
-pip install pandas nltk
-
-# Run with included sample data
-python negative_keyword_analysis.py
+pip install pandas google-analytics-data
+python negative_keyword_analysis_api.py
 ```
 
-The script will produce two output files:
-- `high_bounce_words.csv` — words flagged for high bounce rate
-- `flagged_queries.csv` — all queries containing flagged words
+**R:** [`negative_keyword_analysis_api.R`](negative_keyword_analysis_api.R)
+```r
+install.packages("googleAnalyticsR")
+source("negative_keyword_analysis_api.R")
+```
 
-To use your own data, export a GA4 Explore report and update `DATA_PATH` in the script.
+Best for: Teams that want automation without setting up BigQuery pipelines.
+
+**Setup:**
+1. Create a service account in [Google Cloud Console](https://console.cloud.google.com/iam-admin/serviceaccounts)
+2. Enable the [Google Analytics Data API](https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com)
+3. Download the JSON key file
+4. Grant the service account Viewer access to your GA4 property
+5. Update `KEY_FILE_PATH` and `GA4_PROPERTY_ID` in the script
+
+---
+
+## All Scripts Produce the Same Output
+
+Regardless of which implementation you use, the output is identical:
+
+- **`high_bounce_words.csv`** — words flagged for high bounce rate, sorted by bounce rate
+- **`flagged_queries.csv`** — all queries containing flagged words for manual review
+
+Load `high_bounce_words.csv` into Google Sheets and connect your Looker Studio dashboard to that sheet.
 
 ---
 
 ## Looker Studio Dashboard
 
-A live Looker Studio dashboard is available that connects to the BigQuery view produced by the SQL implementation.
+A live demo dashboard is available connected to the Google Merchandise Store demo data.
 
 🔗 **[View Demo Dashboard](#)** *(link coming soon)*
 
 The dashboard shows:
-- Word-level bounce rate and cost ranked by spend at risk
+- Word-level bounce rate and cost, ranked by spend at risk
 - Query drill-down for any flagged word
-- Pre/post implementation trend view
+- Trend view before and after implementation
 
-To use with your own data: open the dashboard, click **Make a copy**, and connect to your own BigQuery view or Google Sheet.
-
----
-
-## Data Requirements
-
-### For the SQL / BigQuery version
-You need two data pipelines flowing into BigQuery:
-1. **Google Ads → BigQuery** via [Google Ads BigQuery Data Transfer Service](https://cloud.google.com/bigquery-transfer/docs/google-ads-transfer)
-2. **GA4 → BigQuery** via [native GA4 BigQuery export](https://support.google.com/analytics/answer/9823238)
-
-See the comments in `negative_keyword_analysis.sql` for the expected schema.
-
-### For the Python / R versions
-You need:
-- GA4 with Google Ads linked (so query and cost data flow into GA sessions)
-- A custom GA4 Explore report exported as CSV with:
-  - Dimension: Session Google Ads query
-  - Metrics: Sessions, Engaged sessions, Google Ads cost
+To use with your own data: open the dashboard → **Make a copy** → connect to your own BigQuery view or Google Sheet.
 
 ---
 
-## Customizing for Your Industry
+## Customizing for Your Use Case
 
-### Protect multi-word terms
-If your industry has meaningful multi-word phrases (disease names, brand names, product categories), protect them from being split during tokenization.
-
-In SQL:
-```sql
-REPLACE(session_google_ads_query, 'your multi word term', 'your_multi_word_term')
+### Brand terms
+Add your brand name(s) to `BRAND_TERMS` so branded queries don't distort results:
+```python
+BRAND_TERMS = {'your_brand_name', 'brand_abbreviation'}
 ```
 
-In Python:
+### Protected phrases
+Preserve multi-word terms that should not be split during tokenization:
 ```python
 PROTECTED_PHRASES = {
-    'your multi word term': 'your_multi_word_term'
+    'myasthenia gravis': 'myasthenia_gravis',
+    'rolls royce': 'rolls_royce',
 }
 ```
 
-### Extend the stopword list
-The default stopword list covers common English stopwords. Add industry-specific terms that appear frequently but carry no intent signal — product category words, generic descriptors, etc.
+### Stopwords
+All implementations include English, Spanish, and US geographic stopwords by default.
+Add industry-specific terms that carry no intent signal for your campaigns.
 
-### Adjust thresholds
-Start with `BOUNCE_RATE_THRESHOLD = 0.50` and `MIN_SESSIONS = 3`. Adjust based on your account's traffic volume and typical bounce rates.
+### Thresholds
+Start with `BOUNCE_RATE_THRESHOLD = 0.50` and `MIN_SESSIONS = 3`.
+Increase `MIN_SESSIONS` for high-traffic accounts to reduce noise.
 
 ---
 
@@ -165,7 +184,7 @@ Published on Toward Data Science.
 **Elizabeth Lawson**
 Director of Data Science | Marketing Analytics
 
-[Website](https://www.elizabeth-lawson-analytics.com) · [LinkedIn](https://linkedin.com/in/elizabethalawson) · [Case Study](https://www.elizabeth-lawson-analytics.com/paid-search-optimization-case-study)
+[Website](https://www.elizabeth-lawson-analytics.com) · [LinkedIn](https://linkedin.com/in/elizabethalawson) · [Case Study](https://www.elizabeth-lawson-analytics.com/paid-search-optimization-case-study) · [GitHub](https://github.com/elizabethlawson-analytics)
 
 ---
 
