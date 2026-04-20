@@ -4,52 +4,44 @@
 # ============================================================
 # Author: Elizabeth Lawson
 # Description:
-#   Identifies potential negative keywords by breaking paid search
-#   queries into individual words and aggregating GA4 post-click
-#   behavioral metrics (bounce rate, sessions, cost) at the word level.
-#
-#   This version pulls data directly from the GA4 Data API.
-#   No manual export or Looker Studio access required.
+#   Pulls data directly from the GA4 Data API and identifies
+#   potential negative keywords using word-level post-click
+#   behavioral analysis.
 #
 # Requirements:
 #   pip install pandas google-analytics-data
 #
 # Setup:
-#   1. Create a Google Cloud project if you don't have one
+#   1. Create a Google Cloud project
 #      https://console.cloud.google.com
-#
 #   2. Enable the Google Analytics Data API
 #      https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com
-#
 #   3. Create a service account and download the JSON key
 #      https://console.cloud.google.com/iam-admin/serviceaccounts
-#
 #   4. Grant the service account Viewer access to your GA4 property
 #      In GA4: Admin → Account Access Management → Add users
+#   5. Update KEY_FILE_PATH and GA4_PROPERTY_ID below
 #
-#   5. Update the configuration below with your:
-#      - Path to your JSON key file
-#      - GA4 property ID (found in GA4 Admin → Property Settings)
+# Output:
+#   high_bounce_words.csv  — word-level summary with flagged words
+#   flagged_queries.csv    — query-level detail for flagged words
+#
+#   Both files use standardized column names matching the BigQuery
+#   SQL version so all implementations connect to the same
+#   Looker Studio dashboard without any field remapping.
 #
 # Note:
 #   The GA4 Data API does not support the Google Analytics demo account.
 #   Use negative_keyword_analysis_manual.py with sample_data.csv
 #   to test with demo data.
-#
-# For the manual export version (no API required) see:
-#   negative_keyword_analysis_manual.py
 # ============================================================
 
 import pandas as pd
 import re
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
-    DateRange,
-    Dimension,
-    Metric,
-    RunReportRequest,
-    FilterExpression,
-    Filter,
+    DateRange, Dimension, Metric, RunReportRequest,
+    FilterExpression, Filter,
 )
 from google.oauth2 import service_account
 
@@ -57,54 +49,32 @@ from google.oauth2 import service_account
 # Configuration
 # ============================================================
 
-# Path to your service account JSON key file
-KEY_FILE_PATH = 'your-service-account-key.json'
-
-# Your GA4 property ID (numeric, found in GA4 Admin → Property Settings)
-# Format: '123456789' (do not include the 'properties/' prefix)
+KEY_FILE_PATH   = 'your-service-account-key.json'
 GA4_PROPERTY_ID = 'your-ga4-property-id'
-
-# Date range for analysis
-# Format: 'YYYY-MM-DD' or use relative dates like 'today', '90daysAgo'
-START_DATE = '90daysAgo'
-END_DATE   = 'today'
-
-# Maximum number of rows to pull from GA4
-# GA4 API returns up to 250,000 rows per request
-MAX_ROWS = 10000
+START_DATE      = '90daysAgo'
+END_DATE        = 'today'
+MAX_ROWS        = 10000
 
 # ============================================================
 # Brand terms
-# Replace with your own brand name(s) and all variations.
 # ============================================================
 BRAND_TERMS = {
-    'your_brand_name',          # Replace with your actual brand name
+    'your_brand_name',
     # 'your_brand_abbreviation',
-    # 'common_misspelling',
 }
 
 # ============================================================
 # Protected phrases
-# Multi-word terms to treat as a single token.
 # ============================================================
 PROTECTED_PHRASES = {
     # 'myasthenia gravis': 'myasthenia_gravis',
-    # 'rolls royce':       'rolls_royce',
+    # 'rolls royce': 'rolls_royce',
 }
 
-# Thresholds
 MIN_SESSIONS          = 3
 BOUNCE_RATE_THRESHOLD = 0.50
-
-# Output files
-OUTPUT_WORDS_PATH   = 'high_bounce_words.csv'
-OUTPUT_QUERIES_PATH = 'flagged_queries.csv'
-
-# Column names (used throughout — do not change)
-QUERY_COLUMN    = 'Session Google Ads query'
-SESSIONS_COLUMN = 'Sessions'
-ENGAGED_COLUMN  = 'Engaged sessions'
-COST_COLUMN     = 'Ads cost'
+OUTPUT_WORDS_PATH     = 'high_bounce_words.csv'
+OUTPUT_QUERIES_PATH   = 'flagged_queries.csv'
 
 
 # ============================================================
@@ -167,66 +137,32 @@ ALL_STOPWORDS = ENGLISH_STOPWORDS | SPANISH_STOPWORDS | US_STATES
 # ============================================================
 
 def pull_ga4_data():
-    """
-    Pull paid search query data directly from the GA4 Data API.
-    Returns a DataFrame with query, sessions, engaged sessions, and cost.
-    """
     print(f"Connecting to GA4 property {GA4_PROPERTY_ID}...")
-
     credentials = service_account.Credentials.from_service_account_file(
         KEY_FILE_PATH,
         scopes=['https://www.googleapis.com/auth/analytics.readonly']
     )
-    client = BetaAnalyticsDataClient(credentials=credentials)
-
+    client  = BetaAnalyticsDataClient(credentials=credentials)
     request = RunReportRequest(
-        property=f"properties/{GA4_PROPERTY_ID}",
-        dimensions=[
-            Dimension(name="sessionGoogleAdsQuery"),
-        ],
-        metrics=[
+        property    = f"properties/{GA4_PROPERTY_ID}",
+        dimensions  = [Dimension(name="sessionGoogleAdsQuery")],
+        metrics     = [
             Metric(name="sessions"),
             Metric(name="engagedSessions"),
             Metric(name="advertiserAdCost"),
         ],
-        date_ranges=[
-            DateRange(start_date=START_DATE, end_date=END_DATE)
-        ],
-        # Only include rows where a Google Ads query exists
-        dimension_filter=FilterExpression(
-            filter=Filter(
-                field_name="sessionGoogleAdsQuery",
-                string_filter=Filter.StringFilter(
-                    match_type=Filter.StringFilter.MatchType.EXACT,
-                    value="(not set)",
-                    case_sensitive=False,
-                )
-            ),
-            not_expression=FilterExpression(
-                filter=Filter(
-                    field_name="sessionGoogleAdsQuery",
-                    string_filter=Filter.StringFilter(
-                        match_type=Filter.StringFilter.MatchType.EXACT,
-                        value="(not set)",
-                        case_sensitive=False,
-                    )
-                )
-            )
-        ),
-        limit=MAX_ROWS,
+        date_ranges = [DateRange(start_date=START_DATE, end_date=END_DATE)],
+        limit       = MAX_ROWS,
     )
-
     response = client.run_report(request)
-
     rows = []
     for row in response.rows:
         rows.append({
-            QUERY_COLUMN:    row.dimension_values[0].value,
-            SESSIONS_COLUMN: int(row.metric_values[0].value),
-            ENGAGED_COLUMN:  int(row.metric_values[1].value),
-            COST_COLUMN:     float(row.metric_values[2].value),
+            'session_google_ads_query': row.dimension_values[0].value,
+            'sessions':                 int(row.metric_values[0].value),
+            'engaged_sessions':         int(row.metric_values[1].value),
+            'advertiser_ad_cost':       float(row.metric_values[2].value),
         })
-
     df = pd.DataFrame(rows)
     print(f"Pulled {len(df):,} queries from GA4")
     return df
@@ -237,17 +173,17 @@ def pull_ga4_data():
 # ============================================================
 
 df = pull_ga4_data()
-df = df[df[SESSIONS_COLUMN] > 0]
-df = df.dropna(subset=[QUERY_COLUMN])
-df = df[df[QUERY_COLUMN] != '(not set)']
+df = df[df['sessions'] > 0]
+df = df.dropna(subset=['session_google_ads_query'])
+df = df[df['session_google_ads_query'] != '(not set)']
 
 for phrase, replacement in PROTECTED_PHRASES.items():
-    df[QUERY_COLUMN] = df[QUERY_COLUMN].str.replace(
+    df['session_google_ads_query'] = df['session_google_ads_query'].str.replace(
         phrase, replacement, case=False, regex=False
     )
 
-df['Bounces']     = df[SESSIONS_COLUMN] - df[ENGAGED_COLUMN]
-df['Bounce Rate'] = df['Bounces'] / df[SESSIONS_COLUMN]
+df['bounces']     = df['sessions'] - df['engaged_sessions']
+df['bounce_rate'] = df['bounces'] / df['sessions']
 
 print(f"Loaded {len(df):,} queries after filtering")
 
@@ -259,11 +195,8 @@ print(f"Loaded {len(df):,} queries after filtering")
 long_data_rows = []
 
 for _, row in df.iterrows():
-    query = str(row[QUERY_COLUMN])
-    words = [
-        w.lower().strip('.,!?()[]"\'-')
-        for w in query.split()
-    ]
+    query = str(row['session_google_ads_query'])
+    words = [w.lower().strip('.,!?()[]"\'-') for w in query.split()]
     words = [
         w for w in words
         if w not in ALL_STOPWORDS
@@ -273,19 +206,19 @@ for _, row in df.iterrows():
     ]
     for word in words:
         long_data_rows.append({
-            QUERY_COLUMN:    str(row[QUERY_COLUMN]),
-            'Word':          word,
-            COST_COLUMN:     row.get(COST_COLUMN, 0),
-            SESSIONS_COLUMN: row[SESSIONS_COLUMN],
-            'Bounces':       row['Bounces'],
-            'Bounce Rate':   row['Bounce Rate']
+            'session_google_ads_query': str(row['session_google_ads_query']),
+            'word':                     word,
+            'advertiser_ad_cost':       row['advertiser_ad_cost'],
+            'sessions':                 row['sessions'],
+            'bounces':                  row['bounces'],
+            'bounce_rate':              row['bounce_rate']
         })
 
-long_data = pd.DataFrame(long_data_rows)
-long_data[SESSIONS_COLUMN] = pd.to_numeric(
-    long_data[SESSIONS_COLUMN], errors='coerce'
+long_data             = pd.DataFrame(long_data_rows)
+long_data['sessions'] = pd.to_numeric(
+    long_data['sessions'], errors='coerce'
 ).fillna(0).astype(int)
-long_data = long_data[long_data[SESSIONS_COLUMN] > 0]
+long_data = long_data[long_data['sessions'] > 0]
 
 print(f"Tokenized into {len(long_data):,} word-level rows")
 
@@ -294,18 +227,17 @@ print(f"Tokenized into {len(long_data):,} word-level rows")
 # Aggregate to word level
 # ============================================================
 
-word_data = long_data.groupby('Word').agg(
-    Cost        = (COST_COLUMN, 'sum'),
-    Sessions    = (SESSIONS_COLUMN, 'sum'),
-    Bounces     = ('Bounces', 'sum'),
-    Query_Count = (QUERY_COLUMN, 'nunique')
+word_data = long_data.groupby('word').agg(
+    advertiser_ad_cost       = ('advertiser_ad_cost', 'sum'),
+    sessions                 = ('sessions', 'sum'),
+    bounces                  = ('bounces', 'sum'),
+    query_count              = ('session_google_ads_query', 'nunique')
 ).reset_index()
 
-word_data.rename(columns={'Cost': COST_COLUMN}, inplace=True)
-word_data['Bounce Rate'] = word_data['Bounces'] / word_data['Sessions']
-word_data = word_data[word_data['Sessions'] > 0]
+word_data['bounce_rate'] = word_data['bounces'] / word_data['sessions']
+word_data = word_data[word_data['sessions'] > 0]
 word_data = word_data.sort_values(
-    by=['Bounce Rate', 'Sessions'], ascending=[False, False]
+    by=['bounce_rate', 'sessions'], ascending=[False, False]
 )
 
 print(f"Aggregated to {len(word_data):,} unique words")
@@ -316,22 +248,21 @@ print(f"Aggregated to {len(word_data):,} unique words")
 # ============================================================
 
 high_bounce = word_data[
-    (word_data['Bounce Rate'] >= BOUNCE_RATE_THRESHOLD) &
-    (word_data['Sessions']    >= MIN_SESSIONS)
+    (word_data['bounce_rate'] >= BOUNCE_RATE_THRESHOLD) &
+    (word_data['sessions']    >= MIN_SESSIONS)
 ].copy()
 
-print(f"\nFlagged {len(high_bounce):,} words with bounce rate >= "
-      f"{BOUNCE_RATE_THRESHOLD:.0%} and >= {MIN_SESSIONS} sessions:")
+print(f"\nFlagged {len(high_bounce):,} words:")
 print(high_bounce.to_string(index=False))
 
 high_bounce.to_csv(OUTPUT_WORDS_PATH, index=False)
 print(f"\nSaved to: {OUTPUT_WORDS_PATH}")
-print(f"Load this file into Google Sheets to connect to your Looker Studio dashboard.")
+print("Load this file into Google Sheets to connect to your Looker Studio dashboard.")
 
-flagged_words   = set(high_bounce['Word'].str.lower())
+flagged_words   = set(high_bounce['word'].str.lower())
 flagged_queries = long_data[
-    long_data['Word'].str.lower().isin(flagged_words)
-].sort_values(by=[SESSIONS_COLUMN, 'Bounce Rate'], ascending=[False, False])
+    long_data['word'].str.lower().isin(flagged_words)
+].sort_values(by=['sessions', 'bounce_rate'], ascending=[False, False])
 flagged_queries.to_csv(OUTPUT_QUERIES_PATH, index=False)
 print(f"Query detail saved to: {OUTPUT_QUERIES_PATH}")
 
@@ -341,20 +272,16 @@ print(f"Query detail saved to: {OUTPUT_QUERIES_PATH}")
 # ============================================================
 
 def investigate_word(word):
-    """
-    Print all queries containing a specific word.
-    Usage: investigate_word('garage')
-    """
-    subset = long_data[long_data['Word'].str.lower() == word.lower()]
+    """Usage: investigate_word('garage')"""
+    subset = long_data[long_data['word'].str.lower() == word.lower()]
     if subset.empty:
         print(f"No queries found containing '{word}'")
         return
     print(f"\n=== '{word}' ===")
-    print(f"Sessions:    {subset[SESSIONS_COLUMN].sum():,}")
-    print(f"Bounce rate: {subset['Bounces'].sum() / subset[SESSIONS_COLUMN].sum():.1%}")
-    print(f"Cost:        ${subset[COST_COLUMN].sum():,.2f}")
-    print(subset[[QUERY_COLUMN, SESSIONS_COLUMN, 'Bounce Rate', COST_COLUMN]]
-          .sort_values(SESSIONS_COLUMN, ascending=False).to_string(index=False))
+    print(f"Sessions:    {subset['sessions'].sum():,}")
+    print(f"Bounce rate: {subset['bounces'].sum() / subset['sessions'].sum():.1%}")
+    print(f"Cost:        ${subset['advertiser_ad_cost'].sum():,.2f}")
+    print(subset[['session_google_ads_query','sessions','bounce_rate','advertiser_ad_cost']]
+          .sort_values('sessions', ascending=False).to_string(index=False))
 
 # investigate_word('garage')
-# investigate_word('pixel')
