@@ -1,6 +1,6 @@
 # ============================================================
 # Negative Keyword Analysis: Word-Level Post-Click Behavior
-# Python Implementation (Manual / No BigQuery Required)
+# Python — Manual Export Version
 # ============================================================
 # Author: Elizabeth Lawson
 # Description:
@@ -8,22 +8,22 @@
 #   queries into individual words and aggregating GA4 post-click
 #   behavioral metrics (bounce rate, sessions, cost) at the word level.
 #
-#   This version uses a CSV exported directly from a Looker Studio
-#   report connected to GA4. No BigQuery or data engineering required.
+#   This version uses a CSV exported from Looker Studio or GA4 Explore.
+#   No API access or BigQuery required.
 #
 # Requirements:
 #   pip install pandas
 #
 # Data Setup:
-#   Option A: Export from Looker Studio
+#   Option A — Export from Looker Studio:
 #     1. Open your Looker Studio report connected to GA4
-#     2. Add a table with these fields:
+#     2. Add a table with:
 #          Dimension: Session Google Ads query
 #          Metrics:   Sessions, Engaged sessions, Ads cost
 #     3. Click the three dots on the table → Export → CSV
-#     4. Update DATA_PATH below to point to that file
+#     4. Rename the file to sample_data.csv or update DATA_PATH below
 #
-#   Option B: Export from GA4 Explore
+#   Option B — Export from GA4 Explore:
 #     1. Create a Free Form exploration in GA4 with:
 #          Dimension: Session Google Ads query
 #          Metrics:   Sessions, Engaged sessions, Google Ads cost
@@ -31,57 +31,58 @@
 #     3. Set SKIP_ROWS = 6 for raw GA4 exports
 #     4. Set COST_COLUMN = 'Google Ads cost'
 #
-#   A sample dataset (sample_data.csv) is included in this repo
-#   so you can run the analysis immediately without your own data.
+#   The included sample_data.csv uses the Google Merchandise Store
+#   demo account so you can run the analysis immediately.
 #
 # Usage:
 #   1. Update DATA_PATH to point to your exported CSV
 #   2. Update BRAND_TERMS with your brand name(s)
-#   3. Adjust BOUNCE_RATE_THRESHOLD and MIN_SESSIONS as needed
+#   3. Adjust thresholds as needed
 #   4. Run the script
-#   5. Review output in high_bounce_words.csv and flagged_queries.csv
-#   6. Load high_bounce_words.csv into Google Sheets
-#   7. Connect your Looker Studio dashboard to that Google Sheet
+#   5. Load high_bounce_words.csv into Google Sheets
+#   6. Connect your Looker Studio dashboard to that Google Sheet
+#
+# For the GA4 Data API version (no manual export required) see:
+#   negative_keyword_analysis_api.py
 # ============================================================
 
 import pandas as pd
 import re
 
 # ============================================================
-# Configuration — update these values for your use case
+# Configuration
 # ============================================================
 
-# Path to your Looker Studio or GA4 export CSV
-DATA_PATH = 'sample_data.csv'
+DATA_PATH       = 'sample_data.csv'
 
-# Column names — update if your export uses different names
-QUERY_COLUMN    = 'Session Google Ads query'  # Looker Studio export format
+# Column names
+# Looker Studio export: COST_COLUMN = 'Ads cost'
+# GA4 Explore export:   COST_COLUMN = 'Google Ads cost'
+QUERY_COLUMN    = 'Session Google Ads query'
 SESSIONS_COLUMN = 'Sessions'
 ENGAGED_COLUMN  = 'Engaged sessions'
-COST_COLUMN     = 'Ads cost'                  # Use 'Google Ads cost' for GA4 direct export
+COST_COLUMN     = 'Ads cost'
 
 # Number of header rows to skip
 # Looker Studio exports: 0
-# Raw GA4 exports: typically 6
+# Raw GA4 Explore exports: 6
 SKIP_ROWS = 0
 
 # ============================================================
 # Brand terms
-# Replace these with your own brand name(s).
-# Words in this list will be removed from queries before analysis
-# so that branded terms don't distort the word-level results.
-# Add all variations: full name, abbreviations, common misspellings.
+# Replace with your own brand name(s) and all variations.
+# These are removed before analysis so branded terms do not
+# distort the word-level results.
 # ============================================================
 BRAND_TERMS = {
-    'google',       # Replace with your brand name
-    # Add more variations:
-    # 'your brand abbreviation',
-    # 'common misspelling',
+    'your_brand_name',          # Replace with your actual brand name
+    # 'your_brand_abbreviation',
+    # 'common_misspelling',
 }
 
 # ============================================================
-# Multi-word phrases to protect from splitting
-# Add phrases that should be treated as a single token.
+# Protected phrases
+# Multi-word terms that should be treated as a single token.
 # Format: {'original phrase': 'replacement_with_underscores'}
 # ============================================================
 PROTECTED_PHRASES = {
@@ -91,24 +92,19 @@ PROTECTED_PHRASES = {
     # Automotive examples:
     # 'rolls royce':       'rolls_royce',
     # 'alfa romeo':        'alfa_romeo',
-    # Add your own:
 }
 
-# Minimum sessions for a word to be included in output
-MIN_SESSIONS = 3
+# Thresholds
+MIN_SESSIONS            = 3
+BOUNCE_RATE_THRESHOLD   = 0.50
 
-# Bounce rate threshold for flagging words as potential negatives
-BOUNCE_RATE_THRESHOLD = 0.50
-
-# Output file paths
+# Output files
 OUTPUT_WORDS_PATH   = 'high_bounce_words.csv'
 OUTPUT_QUERIES_PATH = 'flagged_queries.csv'
 
 
 # ============================================================
 # Stopwords
-# Covers English, Spanish, US geography, and common search terms.
-# Add or remove based on your industry and use case.
 # ============================================================
 
 ENGLISH_STOPWORDS = {
@@ -135,15 +131,13 @@ ENGLISH_STOPWORDS = {
 
 SPANISH_STOPWORDS = {
     'de','la','el','en','y','a','los','las','un','una','es',
-    'por','con','no','una','su','para','como','más','pero',
-    'sus','le','ya','o','porque','cuando','muy','sin','sobre',
-    'también','me','hasta','hay','donde','quien','desde','todo',
-    'nos','durante','estados','todo','eso','las','mi','del',
-    'se','lo','le','da','si','al','e'
+    'por','con','no','su','para','como','pero','sus','le',
+    'ya','o','porque','cuando','muy','sin','sobre','también',
+    'hasta','hay','donde','quien','desde','todo','nos',
+    'durante','eso','mi','del','se','lo','da','si','al','e',
+    'cerca','tienda'
 }
 
-# US state names and abbreviations
-# Removes geographic modifiers common in local search campaigns
 US_STATES = {
     'alabama','alaska','arizona','arkansas','california','colorado',
     'connecticut','delaware','florida','georgia','hawaii','idaho',
@@ -153,8 +147,7 @@ US_STATES = {
     'hampshire','jersey','mexico','york','carolina','dakota',
     'ohio','oklahoma','oregon','pennsylvania','rhode','island',
     'tennessee','texas','utah','vermont','virginia','washington',
-    'virginia','wisconsin','wyoming',
-    # Abbreviations
+    'wisconsin','wyoming',
     'al','ak','az','ar','ca','co','ct','de','fl','ga','hi','id',
     'il','in','ia','ks','ky','la','me','md','ma','mi','mn','ms',
     'mo','mt','ne','nv','nh','nj','nm','ny','nc','nd','oh','ok',
@@ -170,51 +163,39 @@ ALL_STOPWORDS = ENGLISH_STOPWORDS | SPANISH_STOPWORDS | US_STATES
 # ============================================================
 
 df = pd.read_csv(DATA_PATH, skiprows=SKIP_ROWS)
-
-# Remove unnamed columns
 df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-
-# Remove rows with no query data
 df = df.dropna(subset=[QUERY_COLUMN])
 
-# Apply protected phrase replacements before tokenizing
 for phrase, replacement in PROTECTED_PHRASES.items():
     df[QUERY_COLUMN] = df[QUERY_COLUMN].str.replace(
         phrase, replacement, case=False, regex=False
     )
 
-# Calculate bounces and bounce rate
 df['Bounces']     = df[SESSIONS_COLUMN] - df[ENGAGED_COLUMN]
 df['Bounce Rate'] = df['Bounces'] / df[SESSIONS_COLUMN]
 
 print(f"Loaded {len(df):,} queries")
-print(df.head())
 
 
 # ============================================================
-# Tokenize: break each query into individual words
+# Tokenize
 # ============================================================
 
 long_data_rows = []
 
 for _, row in df.iterrows():
     query = str(row[QUERY_COLUMN])
-
-    # Split into words
-    words = query.lower().split()
-
-    # Clean punctuation from each word
-    words = [w.strip('.,!?()[]"\'-') for w in words]
-
-    # Filter: remove stopwords, brand terms, numbers, empty strings
+    words = [
+        w.lower().strip('.,!?()[]"\'-')
+        for w in query.split()
+    ]
     words = [
         w for w in words
-        if w not in ALL_STOPWORDS          # not a stopword
-        and w not in BRAND_TERMS           # not a brand term
-        and not re.search(r'\d', w)        # contains no digits
-        and len(w) > 1                     # more than 1 character
+        if w not in ALL_STOPWORDS
+        and w not in BRAND_TERMS
+        and not re.search(r'\d', w)
+        and len(w) > 1
     ]
-
     for word in words:
         long_data_rows.append({
             QUERY_COLUMN:    str(row[QUERY_COLUMN]),
@@ -226,16 +207,12 @@ for _, row in df.iterrows():
         })
 
 long_data = pd.DataFrame(long_data_rows)
-
-# Ensure Sessions is numeric
 long_data[SESSIONS_COLUMN] = pd.to_numeric(
     long_data[SESSIONS_COLUMN], errors='coerce'
 ).fillna(0).astype(int)
-
-# Filter out zero-session rows
 long_data = long_data[long_data[SESSIONS_COLUMN] > 0]
 
-print(f"\nTokenized into {len(long_data):,} word-level rows")
+print(f"Tokenized into {len(long_data):,} word-level rows")
 
 
 # ============================================================
@@ -256,7 +233,7 @@ word_data = word_data.sort_values(
     by=['Bounce Rate', 'Sessions'], ascending=[False, False]
 )
 
-print(f"\nAggregated to {len(word_data):,} unique words")
+print(f"Aggregated to {len(word_data):,} unique words")
 
 
 # ============================================================
@@ -273,26 +250,15 @@ print(f"\nFlagged {len(high_bounce):,} words with bounce rate >= "
 print(high_bounce.to_string(index=False))
 
 high_bounce.to_csv(OUTPUT_WORDS_PATH, index=False)
-print(f"\nWord-level output saved to: {OUTPUT_WORDS_PATH}")
+print(f"\nSaved to: {OUTPUT_WORDS_PATH}")
 print(f"Load this file into Google Sheets to connect to your Looker Studio dashboard.")
 
-
-# ============================================================
-# Drill into flagged words — show associated queries
-# ============================================================
-
-flagged_words = set(high_bounce['Word'].str.lower())
-
+flagged_words   = set(high_bounce['Word'].str.lower())
 flagged_queries = long_data[
     long_data['Word'].str.lower().isin(flagged_words)
-].copy()
-
-flagged_queries = flagged_queries.sort_values(
-    by=[SESSIONS_COLUMN, 'Bounce Rate'], ascending=[False, False]
-)
-
+].sort_values(by=[SESSIONS_COLUMN, 'Bounce Rate'], ascending=[False, False])
 flagged_queries.to_csv(OUTPUT_QUERIES_PATH, index=False)
-print(f"Query-level detail saved to: {OUTPUT_QUERIES_PATH}")
+print(f"Query detail saved to: {OUTPUT_QUERIES_PATH}")
 
 
 # ============================================================
@@ -301,30 +267,19 @@ print(f"Query-level detail saved to: {OUTPUT_QUERIES_PATH}")
 
 def investigate_word(word):
     """
-    Print all queries containing a specific flagged word,
-    along with their sessions, bounce rate, and cost.
-
-    Usage: investigate_word('pixel')
-           investigate_word('garage')
+    Print all queries containing a specific word.
+    Usage: investigate_word('garage')
     """
     subset = long_data[long_data['Word'].str.lower() == word.lower()]
     if subset.empty:
         print(f"No queries found containing '{word}'")
         return
+    print(f"\n=== '{word}' ===")
+    print(f"Sessions:    {subset[SESSIONS_COLUMN].sum():,}")
+    print(f"Bounce rate: {subset['Bounces'].sum() / subset[SESSIONS_COLUMN].sum():.1%}")
+    print(f"Cost:        ${subset[COST_COLUMN].sum():,.2f}")
+    print(subset[[QUERY_COLUMN, SESSIONS_COLUMN, 'Bounce Rate', COST_COLUMN]]
+          .sort_values(SESSIONS_COLUMN, ascending=False).to_string(index=False))
 
-    print(f"\n=== Queries containing '{word}' ===")
-    print(f"Total sessions:      {subset[SESSIONS_COLUMN].sum():,}")
-    print(f"Overall bounce rate: "
-          f"{subset['Bounces'].sum() / subset[SESSIONS_COLUMN].sum():.1%}")
-    print(f"Total cost:          ${subset[COST_COLUMN].sum():,.2f}")
-    print(f"\nIndividual queries:")
-    print(subset[[QUERY_COLUMN, SESSIONS_COLUMN,
-                  'Bounce Rate', COST_COLUMN]]
-          .sort_values(SESSIONS_COLUMN, ascending=False)
-          .to_string(index=False))
-
-
-# Example usage — uncomment to investigate specific words:
-# investigate_word('pixel')
 # investigate_word('garage')
-# investigate_word('usa')
+# investigate_word('pixel')
