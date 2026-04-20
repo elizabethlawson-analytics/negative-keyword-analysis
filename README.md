@@ -182,7 +182,7 @@ Published on Toward Data Science.
 ## Author
 
 **Elizabeth Lawson**
-Director of Data Science | Marketing Analytics
+Data Science | Marketing Analytics
 
 [Website](https://www.elizabeth-lawson-analytics.com) · [LinkedIn](https://linkedin.com/in/elizabethalawson) · [Case Study](https://www.elizabeth-lawson-analytics.com/paid-search-optimization-case-study) · [GitHub](https://github.com/elizabethlawson-analytics)
 
