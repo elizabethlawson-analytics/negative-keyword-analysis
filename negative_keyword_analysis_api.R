@@ -4,35 +4,34 @@
 # ============================================================
 # Author: Elizabeth Lawson
 # Description:
-#   Identifies potential negative keywords by breaking paid search
-#   queries into individual words and aggregating GA4 post-click
-#   behavioral metrics (bounce rate, sessions, cost) at the word level.
-#
-#   This version pulls data directly from GA4 using the googleAnalyticsR
-#   package. No manual export or Looker Studio access required.
+#   Pulls data directly from GA4 using googleAnalyticsR and identifies
+#   potential negative keywords using word-level post-click analysis.
 #
 # Requirements:
 #   install.packages(c("googleAnalyticsR", "readr"))
 #
 # Setup:
 #   Authentication Option A — OAuth (browser-based, easiest):
-#     Run ga_auth() and log in with your Google account.
-#     Your account must have at least Viewer access to the GA4 property.
+#     Set USE_SERVICE_ACCOUNT <- FALSE and run ga_auth()
 #
-#   Authentication Option B — Service Account JSON key:
+#   Authentication Option B — Service Account JSON key (fully automated):
 #     1. Create a service account in Google Cloud Console
-#        https://console.cloud.google.com/iam-admin/serviceaccounts
 #     2. Download the JSON key file
-#     3. Grant the service account Viewer access to your GA4 property
-#     4. Set KEY_FILE_PATH below and set USE_SERVICE_ACCOUNT <- TRUE
+#     3. Grant Viewer access to your GA4 property
+#     4. Set USE_SERVICE_ACCOUNT <- TRUE and update KEY_FILE_PATH
+#
+# Output:
+#   high_bounce_words.csv  — word-level summary with flagged words
+#   flagged_queries.csv    — query-level detail for flagged words
+#
+#   Both files use standardized column names matching the BigQuery
+#   SQL version so all implementations connect to the same
+#   Looker Studio dashboard without any field remapping.
 #
 # Note:
 #   The GA4 Data API does not support the Google Analytics demo account.
 #   Use negative_keyword_analysis_manual.R with sample_data.csv
 #   to test with demo data.
-#
-# For the manual export version (no API required) see:
-#   negative_keyword_analysis_manual.R
 # ============================================================
 
 library(googleAnalyticsR)
@@ -42,56 +41,33 @@ library(readr)
 # Configuration
 # ============================================================
 
-# Authentication method
-# TRUE  = service account JSON key (fully automated, no browser needed)
-# FALSE = OAuth browser login (easier setup)
 USE_SERVICE_ACCOUNT <- FALSE
-
-# Path to service account JSON key (only used if USE_SERVICE_ACCOUNT = TRUE)
-KEY_FILE_PATH <- "your-service-account-key.json"
-
-# Your GA4 property ID (numeric, found in GA4 Admin → Property Settings)
-GA4_PROPERTY_ID <- "your-ga4-property-id"
-
-# Date range for analysis
-START_DATE <- "90daysAgo"
-END_DATE   <- "today"
-
-# Maximum rows to pull from GA4
-MAX_ROWS <- 10000
-
-# Column names (do not change)
-QUERY_COLUMN    <- "Session Google Ads query"
-SESSIONS_COLUMN <- "Sessions"
-ENGAGED_COLUMN  <- "Engaged sessions"
-COST_COLUMN     <- "Ads cost"
+KEY_FILE_PATH       <- "your-service-account-key.json"
+GA4_PROPERTY_ID     <- "your-ga4-property-id"
+START_DATE          <- "90daysAgo"
+END_DATE            <- "today"
+MAX_ROWS            <- 10000
 
 # ============================================================
 # Brand terms
-# Replace with your own brand name(s) and all variations.
 # ============================================================
 BRAND_TERMS <- c(
-  "your_brand_name"           # Replace with your actual brand name
-  # "your_brand_abbreviation",
-  # "common_misspelling"
+  "your_brand_name"
+  # "your_brand_abbreviation"
 )
 
 # ============================================================
 # Protected phrases
-# Multi-word terms to treat as a single token.
 # ============================================================
 PROTECTED_PHRASES <- c(
   # "myasthenia gravis" = "myasthenia_gravis",
   # "rolls royce"       = "rolls_royce"
 )
 
-# Thresholds
 MIN_SESSIONS          <- 3
 BOUNCE_RATE_THRESHOLD <- 0.50
-
-# Output files
-OUTPUT_WORDS_PATH   <- "high_bounce_words.csv"
-OUTPUT_QUERIES_PATH <- "flagged_queries.csv"
+OUTPUT_WORDS_PATH     <- "high_bounce_words.csv"
+OUTPUT_QUERIES_PATH   <- "flagged_queries.csv"
 
 
 # ============================================================
@@ -163,12 +139,12 @@ if (USE_SERVICE_ACCOUNT) {
 
 
 # ============================================================
-# Pull data from GA4 Data API
+# Pull data from GA4
 # ============================================================
 
 cat("Pulling data from GA4 property", GA4_PROPERTY_ID, "...\n")
 
-df <- ga_data(
+raw <- ga_data(
   propertyId = GA4_PROPERTY_ID,
   metrics    = c("sessions", "engagedSessions", "advertiserAdCost"),
   dimensions = c("sessionGoogleAdsQuery"),
@@ -176,16 +152,18 @@ df <- ga_data(
   limit      = MAX_ROWS
 )
 
-# Rename columns to match standard format
-names(df)[names(df) == "sessionGoogleAdsQuery"] <- QUERY_COLUMN
-names(df)[names(df) == "sessions"]              <- SESSIONS_COLUMN
-names(df)[names(df) == "engagedSessions"]       <- ENGAGED_COLUMN
-names(df)[names(df) == "advertiserAdCost"]      <- COST_COLUMN
+# Rename to standard column names
+df <- data.frame(
+  session_google_ads_query = raw$sessionGoogleAdsQuery,
+  sessions                 = raw$sessions,
+  engaged_sessions         = raw$engagedSessions,
+  advertiser_ad_cost       = raw$advertiserAdCost,
+  stringsAsFactors         = FALSE
+)
 
-# Remove rows with no query or zero sessions
-df <- df[!is.na(df[[QUERY_COLUMN]]), ]
-df <- df[df[[QUERY_COLUMN]] != "(not set)", ]
-df <- df[df[[SESSIONS_COLUMN]] > 0, ]
+df <- df[!is.na(df$session_google_ads_query), ]
+df <- df[df$session_google_ads_query != "(not set)", ]
+df <- df[df$sessions > 0, ]
 
 cat("Pulled", nrow(df), "queries from GA4\n")
 
@@ -196,19 +174,16 @@ cat("Pulled", nrow(df), "queries from GA4\n")
 
 if (length(PROTECTED_PHRASES) > 0) {
   for (i in seq_along(PROTECTED_PHRASES)) {
-    df[[QUERY_COLUMN]] <- gsub(
+    df$session_google_ads_query <- gsub(
       names(PROTECTED_PHRASES)[i],
       PROTECTED_PHRASES[i],
-      df[[QUERY_COLUMN]],
-      ignore.case = TRUE
+      df$session_google_ads_query, ignore.case = TRUE
     )
   }
 }
 
-df$Bounces     <- df[[SESSIONS_COLUMN]] - df[[ENGAGED_COLUMN]]
-df$Bounce_Rate <- df$Bounces / df[[SESSIONS_COLUMN]]
-
-cat("Loaded", nrow(df), "queries after filtering\n")
+df$bounces     <- df$sessions - df$engaged_sessions
+df$bounce_rate <- df$bounces / df$sessions
 
 
 # ============================================================
@@ -219,7 +194,7 @@ long_data <- NULL
 itime     <- proc.time()[3]
 
 for (i in 1:nrow(df)) {
-  query <- tolower(as.character(df[[QUERY_COLUMN]][i]))
+  query <- tolower(as.character(df$session_google_ads_query[i]))
   words <- unlist(strsplit(query, " "))
   words <- gsub("[.,!?()\\[\\]\"'\\-]", "", words)
   words <- words[
@@ -229,20 +204,18 @@ for (i in 1:nrow(df)) {
     nchar(words) > 1 &
     words != ""
   ]
-
   if (length(words) > 0) {
     temp <- data.frame(
-      Query       = as.character(df[[QUERY_COLUMN]][i]),
-      Word        = words,
-      Cost        = df[[COST_COLUMN]][i],
-      Sessions    = df[[SESSIONS_COLUMN]][i],
-      Bounces     = df$Bounces[i],
-      Bounce_Rate = df$Bounce_Rate[i],
-      stringsAsFactors = FALSE
+      session_google_ads_query = as.character(df$session_google_ads_query[i]),
+      word                     = words,
+      advertiser_ad_cost       = df$advertiser_ad_cost[i],
+      sessions                 = df$sessions[i],
+      bounces                  = df$bounces[i],
+      bounce_rate              = df$bounce_rate[i],
+      stringsAsFactors         = FALSE
     )
     long_data <- rbind(long_data, temp)
   }
-
   if (i %% 100 == 0) {
     ctime     <- proc.time()[3]
     timetoend <- ((ctime - itime) / i) * (nrow(df) - i)
@@ -251,10 +224,7 @@ for (i in 1:nrow(df)) {
   }
 }
 
-names(long_data)[names(long_data) == "Cost"]     <- COST_COLUMN
-names(long_data)[names(long_data) == "Sessions"] <- SESSIONS_COLUMN
-long_data <- long_data[long_data[[SESSIONS_COLUMN]] > 0, ]
-
+long_data <- long_data[long_data$sessions > 0, ]
 cat("Tokenized into", nrow(long_data), "word-level rows\n")
 
 
@@ -263,19 +233,22 @@ cat("Tokenized into", nrow(long_data), "word-level rows\n")
 # ============================================================
 
 word_data <- aggregate(
-  long_data[, c(COST_COLUMN, SESSIONS_COLUMN, "Bounces")],
-  by  = list(Word = long_data$Word),
+  long_data[, c("advertiser_ad_cost", "sessions", "bounces")],
+  by  = list(word = long_data$word),
   FUN = sum
 )
 
-query_counts          <- aggregate(Query ~ Word, data = long_data,
-                                    FUN = function(x) length(unique(x)))
-names(query_counts)[2] <- "Query_Count"
-word_data              <- merge(word_data, query_counts, by = "Word")
-word_data$Bounce_Rate  <- word_data$Bounces / word_data[[SESSIONS_COLUMN]]
-word_data              <- word_data[word_data[[SESSIONS_COLUMN]] > 0, ]
-word_data              <- word_data[order(word_data$Bounce_Rate,
-                                           word_data[[SESSIONS_COLUMN]],
+query_counts           <- aggregate(
+  session_google_ads_query ~ word,
+  data = long_data,
+  FUN  = function(x) length(unique(x))
+)
+names(query_counts)[2] <- "query_count"
+word_data              <- merge(word_data, query_counts, by = "word")
+word_data$bounce_rate  <- word_data$bounces / word_data$sessions
+word_data              <- word_data[word_data$sessions > 0, ]
+word_data              <- word_data[order(word_data$bounce_rate,
+                                           word_data$sessions,
                                            decreasing = TRUE), ]
 
 cat("Aggregated to", nrow(word_data), "unique words\n")
@@ -286,8 +259,8 @@ cat("Aggregated to", nrow(word_data), "unique words\n")
 # ============================================================
 
 high_bounce <- word_data[
-  word_data$Bounce_Rate        >= BOUNCE_RATE_THRESHOLD &
-  word_data[[SESSIONS_COLUMN]] >= MIN_SESSIONS,
+  word_data$bounce_rate >= BOUNCE_RATE_THRESHOLD &
+  word_data$sessions    >= MIN_SESSIONS,
 ]
 
 cat("\nFlagged", nrow(high_bounce), "words:\n")
@@ -297,10 +270,10 @@ write_csv(high_bounce, OUTPUT_WORDS_PATH)
 cat("Saved to:", OUTPUT_WORDS_PATH, "\n")
 cat("Load this file into Google Sheets to connect to your Looker Studio dashboard.\n")
 
-flagged_words   <- tolower(high_bounce$Word)
-flagged_queries <- long_data[tolower(long_data$Word) %in% flagged_words, ]
-flagged_queries <- flagged_queries[order(flagged_queries[[SESSIONS_COLUMN]],
-                                          flagged_queries$Bounce_Rate,
+flagged_words   <- tolower(high_bounce$word)
+flagged_queries <- long_data[tolower(long_data$word) %in% flagged_words, ]
+flagged_queries <- flagged_queries[order(flagged_queries$sessions,
+                                          flagged_queries$bounce_rate,
                                           decreasing = TRUE), ]
 write_csv(flagged_queries, OUTPUT_QUERIES_PATH)
 cat("Query detail saved to:", OUTPUT_QUERIES_PATH, "\n")
@@ -311,19 +284,19 @@ cat("Query detail saved to:", OUTPUT_QUERIES_PATH, "\n")
 # ============================================================
 
 investigate_word <- function(word) {
-  subset <- long_data[tolower(long_data$Word) == tolower(word), ]
+  subset <- long_data[tolower(long_data$word) == tolower(word), ]
   if (nrow(subset) == 0) {
     cat("No queries found containing '", word, "'\n", sep = "")
     return(invisible(NULL))
   }
   cat("\n=== '", word, "' ===\n", sep = "")
-  cat("Sessions:    ", sum(subset[[SESSIONS_COLUMN]]), "\n")
+  cat("Sessions:    ", sum(subset$sessions), "\n")
   cat("Bounce rate: ",
-      round(sum(subset$Bounces) / sum(subset[[SESSIONS_COLUMN]]) * 100, 1),
-      "%\n", sep = "")
-  cat("Cost:        $", round(sum(subset[[COST_COLUMN]]), 2), "\n\n")
-  print(subset[order(subset[[SESSIONS_COLUMN]], decreasing = TRUE),
-               c("Query", SESSIONS_COLUMN, "Bounce_Rate", COST_COLUMN)])
+      round(sum(subset$bounces) / sum(subset$sessions) * 100, 1), "%\n", sep = "")
+  cat("Cost:        $", round(sum(subset$advertiser_ad_cost), 2), "\n\n")
+  print(subset[order(subset$sessions, decreasing = TRUE),
+               c("session_google_ads_query", "sessions",
+                 "bounce_rate", "advertiser_ad_cost")])
 }
 
 # investigate_word("garage")
