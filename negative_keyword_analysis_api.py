@@ -225,29 +225,26 @@ print(f"Tokenized into {len(long_data):,} word-level rows")
 # Aggregate to word level
 # ============================================================
 
-word_data = long_data.groupby('word').agg(
-    advertiser_ad_cost       = ('advertiser_ad_cost', 'sum'),
-    sessions                 = ('sessions', 'sum'),
-    bounces                  = ('bounces', 'sum'),
-    query_count              = ('session_google_ads_query', 'nunique')
-).reset_index()
-
-word_data['bounce_rate'] = word_data['bounces'] / word_data['sessions']
-word_data = word_data[word_data['sessions'] > 0]
-word_data = word_data.sort_values(
-    by=['bounce_rate', 'sessions'], ascending=[False, False]
-)
-
-print(f"Aggregated to {len(word_data):,} unique words")
-
-
 # ============================================================
 # Save output
-# One file containing all words with their metrics.
+# One row per word per query — Looker Studio handles aggregation.
 # Load this into Google Sheets and connect Looker Studio to it.
-# Filter and explore directly in the dashboard.
 # ============================================================
 
-word_data.to_csv(OUTPUT_PATH, index=False)
-print(f"\nSaved to: {OUTPUT_PATH}")
+output = long_data[[
+    'word',
+    'session_google_ads_query',
+    'sessions',
+    'bounces',
+    'bounce_rate',
+    'advertiser_ad_cost'
+]].copy()
+
+output = output.sort_values(
+    by=['word', 'sessions'], ascending=[True, False]
+)
+
+output.to_csv(OUTPUT_PATH, index=False)
+print(f"
+Saved {len(output):,} rows to: {OUTPUT_PATH}")
 print("Load this file into Google Sheets to connect to your Looker Studio dashboard.")
