@@ -4,7 +4,9 @@
 
 Most paid search optimization stops at the click. This methodology starts there.
 
-By breaking search queries into individual words and aggregating GA4 post-click behavior (bounce rate, sessions, cost) at the word level, this approach surfaces unqualified traffic patterns that traditional query-level review consistently misses.
+By breaking search queries into individual words and aggregating GA4 post-click behavior (bounce rate, sessions, cost) at the word level, this approach surfaces unqualified traffic patterns that traditional query-level review consistently misses. 
+
+This approach evaluates post-click behavior using bounce rate, derived from sessions and engaged sessions, to identify unqualified traffic.
 
 **[See full case study](https://www.elizabeth-lawson-analytics.com/paid-search-optimization-case-study)**
 
