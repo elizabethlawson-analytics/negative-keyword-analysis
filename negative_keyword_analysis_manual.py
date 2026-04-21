@@ -35,8 +35,8 @@
 #   demo account so you can run the analysis immediately.
 #
 # Output:
-#   high_bounce_words.csv  — word-level summary with flagged words
-#   flagged_queries.csv    — query-level detail for flagged words
+#   word_level_analysis.csv — all words with sessions, bounces, bounce_rate, cost
+
 #
 #   Both files use standardized column names matching the BigQuery
 #   SQL version so all implementations connect to the same
@@ -47,8 +47,8 @@
 #   2. Update BRAND_TERMS with your brand name(s)
 #   3. Adjust thresholds as needed
 #   4. Run the script
-#   5. Load high_bounce_words.csv into Google Sheets
-#   6. Connect your Looker Studio dashboard to that Google Sheet
+#   4. Load word_level_analysis.csv into Google Sheets
+
 #
 # For the GA4 Data API version (no manual export required) see:
 #   negative_keyword_analysis_api.py
@@ -103,12 +103,8 @@ PROTECTED_PHRASES = {
 }
 
 # Thresholds
-MIN_SESSIONS          = 3
-BOUNCE_RATE_THRESHOLD = 0.50
-
-# Output files
-OUTPUT_WORDS_PATH   = 'high_bounce_words.csv'
-OUTPUT_QUERIES_PATH = 'flagged_queries.csv'
+MIN_SESSIONS = 3
+OUTPUT_PATH  = 'word_level_analysis.csv'
 
 
 # ============================================================
@@ -246,51 +242,15 @@ word_data = word_data.sort_values(
 
 print(f"Aggregated to {len(word_data):,} unique words")
 
+print(f"Aggregated to {len(word_data):,} unique words")
 
 # ============================================================
-# Flag high-bounce words
+# Save output
+# One file containing all words with their metrics.
+# Load this into Google Sheets and connect Looker Studio to it.
+# Filter and explore directly in the dashboard.
 # ============================================================
 
-high_bounce = word_data[
-    (word_data['bounce_rate'] >= BOUNCE_RATE_THRESHOLD) &
-    (word_data['sessions']    >= MIN_SESSIONS)
-].copy()
-
-print(f"\nFlagged {len(high_bounce):,} words with bounce rate >= "
-      f"{BOUNCE_RATE_THRESHOLD:.0%} and >= {MIN_SESSIONS} sessions:")
-print(high_bounce.to_string(index=False))
-
-high_bounce.to_csv(OUTPUT_WORDS_PATH, index=False)
-print(f"\nSaved to: {OUTPUT_WORDS_PATH}")
+word_data.to_csv(OUTPUT_PATH, index=False)
+print(f"\nSaved to: {OUTPUT_PATH}")
 print("Load this file into Google Sheets to connect to your Looker Studio dashboard.")
-
-flagged_words   = set(high_bounce['word'].str.lower())
-flagged_queries = long_data[
-    long_data['word'].str.lower().isin(flagged_words)
-].sort_values(by=['sessions', 'bounce_rate'], ascending=[False, False])
-flagged_queries.to_csv(OUTPUT_QUERIES_PATH, index=False)
-print(f"Query detail saved to: {OUTPUT_QUERIES_PATH}")
-
-
-# ============================================================
-# Helper: investigate a specific word
-# ============================================================
-
-def investigate_word(word):
-    """
-    Print all queries containing a specific word.
-    Usage: investigate_word('garage')
-    """
-    subset = long_data[long_data['word'].str.lower() == word.lower()]
-    if subset.empty:
-        print(f"No queries found containing '{word}'")
-        return
-    print(f"\n=== '{word}' ===")
-    print(f"Sessions:    {subset['sessions'].sum():,}")
-    print(f"Bounce rate: {subset['bounces'].sum() / subset['sessions'].sum():.1%}")
-    print(f"Cost:        ${subset['advertiser_ad_cost'].sum():,.2f}")
-    print(subset[['session_google_ads_query', 'sessions', 'bounce_rate', 'advertiser_ad_cost']]
-          .sort_values('sessions', ascending=False).to_string(index=False))
-
-# investigate_word('garage')
-# investigate_word('pixel')
