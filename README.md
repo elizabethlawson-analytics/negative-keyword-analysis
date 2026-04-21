@@ -6,9 +6,9 @@ Most paid search optimization stops at the click. This methodology starts there.
 
 By breaking search queries into individual words and aggregating GA4 post-click behavior (bounce rate, sessions, cost) at the word level, this approach surfaces unqualified traffic patterns that traditional query-level review consistently misses.
 
-**See full case study:** [https://www.elizabeth-lawson-analytics.com/paid-search-optimization-case-study]
+**[See full case study](https://www.elizabeth-lawson-analytics.com/paid-search-optimization-case-study)**
 
-**View demo dashboard:** [https://datastudio.google.com/reporting/f2c86a83-417b-4f37-b9b2-7483973cf5ed]
+**[View Demo Dashboard](https://datastudio.google.com/reporting/f2c86a83-417b-4f37-b9b2-7483973cf5ed)**
 
 ---
 
@@ -135,7 +135,7 @@ Load `high_bounce_words.csv` into Google Sheets and connect your Looker Studio d
 
 A live demo dashboard is available connected to the Google Merchandise Store demo data.
 
-🔗 **[View Demo Dashboard](#)** *(link coming soon)*
+🔗 **[View Demo Dashboard](https://datastudio.google.com/reporting/f2c86a83-417b-4f37-b9b2-7483973cf5ed)** *(link coming soon)*
 
 The dashboard shows:
 - Word-level bounce rate and cost, ranked by spend at risk
@@ -172,14 +172,6 @@ Start with `BOUNCE_RATE_THRESHOLD = 0.50` and `MIN_SESSIONS = 3`.
 Increase `MIN_SESSIONS` for high-traffic accounts to reduce noise.
 
 ---
-
-## Article
-
-This methodology is described in detail in:
-
-**[Finding Hidden Wasted Spend in Paid Search Using Post-Click Behavior](#)** *(link coming soon)*
-
-Published on Toward Data Science.
 
 ---
 
