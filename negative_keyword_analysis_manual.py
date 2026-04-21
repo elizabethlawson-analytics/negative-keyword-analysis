@@ -102,12 +102,93 @@ BRAND_TERMS = {
 # Format: {'original phrase': 'replacement_with_underscores'}
 # ============================================================
 PROTECTED_PHRASES = {
-    # Healthcare examples:
-    # 'myasthenia gravis': 'myasthenia_gravis',
-    # 'lambert eaton':     'lambert_eaton',
-    # Automotive examples:
-    # 'rolls royce':       'rolls_royce',
-    # 'alfa romeo':        'alfa_romeo',
+    # Multi-word furniture terms that should be treated as a single token.
+    # Without these, "lazy boy" would be split into "lazy" and "boy" separately.
+    # Add any industry-specific multi-word terms relevant to your campaigns.
+
+    # Brand/style names
+    'lazy boy':         'lazy_boy',
+    'la z boy':         'lazy_boy',
+    'la-z-boy':         'lazy_boy',
+
+    # Sofa/couch types
+    'sofa bed':         'sofa_bed',
+    'sleeper sofa':     'sleeper_sofa',
+    'pull out sofa':    'pull_out_sofa',
+    'pull out couch':   'pull_out_couch',
+    'sofa sectional':   'sofa_sectional',
+    'l shaped sofa':    'l_shaped_sofa',
+    'l shaped couch':   'l_shaped_couch',
+    'u shaped sofa':    'u_shaped_sofa',
+
+    # Table types
+    'coffee table':     'coffee_table',
+    'end table':        'end_table',
+    'side table':       'side_table',
+    'dining table':     'dining_table',
+    'kitchen table':    'kitchen_table',
+    'console table':    'console_table',
+    'accent table':     'accent_table',
+    'sofa table':       'sofa_table',
+    'night stand':      'night_stand',
+    'night table':      'night_table',
+
+    # Chair types
+    'rocking chair':    'rocking_chair',
+    'accent chair':     'accent_chair',
+    'arm chair':        'arm_chair',
+    'office chair':     'office_chair',
+    'dining chair':     'dining_chair',
+    'lounge chair':     'lounge_chair',
+    'lift chair':       'lift_chair',
+    'power recliner':   'power_recliner',
+    'zero gravity':     'zero_gravity',
+
+    # Bedroom
+    'bed frame':        'bed_frame',
+    'king size':        'king_size',
+    'queen size':       'queen_size',
+    'twin size':        'twin_size',
+    'full size':        'full_size',
+    'bunk bed':         'bunk_bed',
+    'day bed':          'day_bed',
+    'murphy bed':       'murphy_bed',
+    'platform bed':     'platform_bed',
+    'storage bed':      'storage_bed',
+
+    # Dining
+    'dining room':      'dining_room',
+    'dining set':       'dining_set',
+    'bar stool':        'bar_stool',
+    'counter stool':    'counter_stool',
+
+    # Living room
+    'living room':      'living_room',
+    'sectional sofa':   'sectional_sofa',
+    'love seat':        'love_seat',
+
+    # Storage
+    'book case':        'bookcase',
+    'book shelf':       'bookshelf',
+    'tv stand':         'tv_stand',
+    'media console':    'media_console',
+    'chest of drawers': 'chest_of_drawers',
+    'chest of drawer':  'chest_of_drawers',
+
+    # Mattress
+    'box spring':       'box_spring',
+    'memory foam':      'memory_foam',
+    'king mattress':    'king_mattress',
+    'queen mattress':   'queen_mattress',
+
+    # Other
+    'grand piano':      'grand_piano',
+    'home office':      'home_office',
+    'patio furniture':  'patio_furniture',
+    'outdoor furniture':'outdoor_furniture',
+    'big lots':         'big_lots',
+    'home depot':       'home_depot',
+    'rooms to go':      'rooms_to_go',
 }
 
 # Thresholds
@@ -175,7 +256,12 @@ ALL_STOPWORDS = ENGLISH_STOPWORDS | SPANISH_STOPWORDS | US_STATES
 # ============================================================
 
 df = pd.read_csv(DATA_PATH, skiprows=SKIP_ROWS)
-df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+
+# Rename columns by position to handle BOM characters or encoding
+# issues that can corrupt column names when downloading from GitHub,
+# Google Sheets, or Looker Studio exports.
+df.columns = [QUERY_COLUMN, SESSIONS_COLUMN, ENGAGED_COLUMN, COST_COLUMN]
+
 df = df.dropna(subset=[QUERY_COLUMN])
 
 for phrase, replacement in PROTECTED_PHRASES.items():
