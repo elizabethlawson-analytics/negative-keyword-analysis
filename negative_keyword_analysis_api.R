@@ -21,8 +21,8 @@
 #     4. Set USE_SERVICE_ACCOUNT <- TRUE and update KEY_FILE_PATH
 #
 # Output:
-#   high_bounce_words.csv  — word-level summary with flagged words
-#   flagged_queries.csv    — query-level detail for flagged words
+#   word_level_analysis.csv — all words with sessions, bounces, bounce_rate, cost
+
 #
 #   Both files use standardized column names matching the BigQuery
 #   SQL version so all implementations connect to the same
@@ -64,10 +64,8 @@ PROTECTED_PHRASES <- c(
   # "rolls royce"       = "rolls_royce"
 )
 
-MIN_SESSIONS          <- 3
-BOUNCE_RATE_THRESHOLD <- 0.50
-OUTPUT_WORDS_PATH     <- "high_bounce_words.csv"
-OUTPUT_QUERIES_PATH   <- "flagged_queries.csv"
+MIN_SESSIONS      <- 3
+OUTPUT_PATH       <- "word_level_analysis.csv"
 
 
 # ============================================================
@@ -255,49 +253,12 @@ cat("Aggregated to", nrow(word_data), "unique words\n")
 
 
 # ============================================================
-# Flag high-bounce words
+# Save output
+# One file containing all words with their metrics.
+# Load this into Google Sheets and connect Looker Studio to it.
+# Filter and explore directly in the dashboard.
 # ============================================================
 
-high_bounce <- word_data[
-  word_data$bounce_rate >= BOUNCE_RATE_THRESHOLD &
-  word_data$sessions    >= MIN_SESSIONS,
-]
-
-cat("\nFlagged", nrow(high_bounce), "words:\n")
-print(high_bounce)
-
-write_csv(high_bounce, OUTPUT_WORDS_PATH)
-cat("Saved to:", OUTPUT_WORDS_PATH, "\n")
+write_csv(word_data, OUTPUT_PATH)
+cat("Saved to:", OUTPUT_PATH, "\n")
 cat("Load this file into Google Sheets to connect to your Looker Studio dashboard.\n")
-
-flagged_words   <- tolower(high_bounce$word)
-flagged_queries <- long_data[tolower(long_data$word) %in% flagged_words, ]
-flagged_queries <- flagged_queries[order(flagged_queries$sessions,
-                                          flagged_queries$bounce_rate,
-                                          decreasing = TRUE), ]
-write_csv(flagged_queries, OUTPUT_QUERIES_PATH)
-cat("Query detail saved to:", OUTPUT_QUERIES_PATH, "\n")
-
-
-# ============================================================
-# Helper: investigate a specific word
-# ============================================================
-
-investigate_word <- function(word) {
-  subset <- long_data[tolower(long_data$word) == tolower(word), ]
-  if (nrow(subset) == 0) {
-    cat("No queries found containing '", word, "'\n", sep = "")
-    return(invisible(NULL))
-  }
-  cat("\n=== '", word, "' ===\n", sep = "")
-  cat("Sessions:    ", sum(subset$sessions), "\n")
-  cat("Bounce rate: ",
-      round(sum(subset$bounces) / sum(subset$sessions) * 100, 1), "%\n", sep = "")
-  cat("Cost:        $", round(sum(subset$advertiser_ad_cost), 2), "\n\n")
-  print(subset[order(subset$sessions, decreasing = TRUE),
-               c("session_google_ads_query", "sessions",
-                 "bounce_rate", "advertiser_ad_cost")])
-}
-
-# investigate_word("garage")
-# investigate_word("pixel")
