@@ -181,23 +181,18 @@ tokens AS (
 
 -- ============================================================
 -- FINAL OUTPUT
--- One row per word per session/query combination.
--- Join with a properties lookup table if available to add
--- human-readable property/account names.
+-- One row per word per query combination.
+-- Looker Studio handles all aggregation.
+-- Connect this table directly to Looker Studio.
 -- ============================================================
 SELECT
   date,
-  t.property,
-  n.display_name,           -- from properties lookup; remove if not applicable
-  session_google_ads_query,
+  property,
   word,
-  advertiser_ad_cost,
+  session_google_ads_query,
   sessions,
   bounces,
-  bounce_rate
-FROM tokens t
-
--- Optional: join a properties table to get display names
--- Remove this join if you do not have a properties lookup table
-LEFT JOIN `your-project-id.your_ads_dataset.properties` n
-  ON t.property = n.name
+  bounce_rate,
+  advertiser_ad_cost
+FROM tokens
+ORDER BY word, sessions DESC
