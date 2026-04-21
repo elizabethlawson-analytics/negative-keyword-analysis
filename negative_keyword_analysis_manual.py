@@ -87,10 +87,11 @@ BRAND_TERMS = {
     # These are removed before analysis so your branded queries
     # do not appear as flagged words in the output.
     #
-    # Sample data uses brand1-brand8 as placeholders for real brand names.
+    # Sample data uses brand1-brand15 as placeholders for real brand names.
     # When using your own data, replace these with your actual brand names.
-    'brand1', 'brand2', 'brand3', 'brand4',
-    'brand5', 'brand6', 'brand7', 'brand8',
+    'brand1',  'brand2',  'brand3',  'brand4',  'brand5',
+    'brand6',  'brand7',  'brand8',  'brand9',  'brand10',
+    'brand11', 'brand12', 'brand13', 'brand14', 'brand15',
     # Add your own:
     # 'your_brand_name',
     # 'your_brand_abbreviation',
