@@ -83,9 +83,17 @@ SKIP_ROWS = 0
 # distort the word-level results.
 # ============================================================
 BRAND_TERMS = {
-    'your_brand_name',          # Replace with your actual brand name
+    # Replace with your own brand name(s) and all variations.
+    # These are removed before analysis so your branded queries
+    # do not appear as flagged words in the output.
+    #
+    # Sample data uses brand1-brand8 as placeholders for real brand names.
+    # When using your own data, replace these with your actual brand names.
+    'brand1', 'brand2', 'brand3', 'brand4',
+    'brand5', 'brand6', 'brand7', 'brand8',
+    # Add your own:
+    # 'your_brand_name',
     # 'your_brand_abbreviation',
-    # 'common_misspelling',
 }
 
 # ============================================================
