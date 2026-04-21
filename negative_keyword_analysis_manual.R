@@ -191,35 +191,25 @@ cat("Tokenized into", nrow(long_data), "word-level rows\n")
 # Aggregate to word level
 # ============================================================
 
-word_data <- aggregate(
-  long_data[, c("advertiser_ad_cost", "sessions", "bounces")],
-  by  = list(word = long_data$word),
-  FUN = sum
-)
-
-query_counts           <- aggregate(
-  session_google_ads_query ~ word,
-  data = long_data,
-  FUN  = function(x) length(unique(x))
-)
-names(query_counts)[2] <- "query_count"
-word_data              <- merge(word_data, query_counts, by = "word")
-word_data$bounce_rate  <- word_data$bounces / word_data$sessions
-word_data              <- word_data[word_data$sessions > 0, ]
-word_data              <- word_data[order(word_data$bounce_rate,
-                                           word_data$sessions,
-                                           decreasing = TRUE), ]
-
-cat("Aggregated to", nrow(word_data), "unique words\n")
-
-
 # ============================================================
 # Save output
-# One file containing all words with their metrics.
+# One row per word per query — Looker Studio handles aggregation.
 # Load this into Google Sheets and connect Looker Studio to it.
-# Filter and explore directly in the dashboard.
 # ============================================================
 
-write_csv(word_data, OUTPUT_PATH)
-cat("Saved to:", OUTPUT_PATH, "\n")
-cat("Load this file into Google Sheets to connect to your Looker Studio dashboard.\n")
+output <- long_data[, c(
+  "word",
+  "session_google_ads_query",
+  "sessions",
+  "bounces",
+  "bounce_rate",
+  "advertiser_ad_cost"
+)]
+
+output <- output[order(output$word, -output$sessions), ]
+
+write_csv(output, OUTPUT_PATH)
+cat("Saved", nrow(output), "rows to:", OUTPUT_PATH, "
+")
+cat("Load this file into Google Sheets to connect to your Looker Studio dashboard.
+")
